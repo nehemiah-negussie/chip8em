@@ -5,6 +5,8 @@
 #define START_ADDRESS 0x200
 #define FONTSET_SIZE 16 * 5 // 16 characters and 5 bytes
 #define FONTSET_START_ADDRESS 0x50
+#define VIDEO_WIDTH 64
+#define VIDEO_HEIGHT 32
 
 /*
 For an opcode
@@ -14,6 +16,8 @@ n referst to a 4 bit number (last nibble)
 X looks up one of the 16 registers (second nibble)
 Y looks up one of the 16 registers (third nibble)
 */
+
+// index just stores memory addresses to be used in operations that are too big for 8 bit registers
 
 typedef struct chip8 {
     // uint8_t represents 1 byte
@@ -293,49 +297,188 @@ void OP_Cxkk(chip8* chip){
 void OP_Dxyn(chip8* chip){
     uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
     uint8_t Vy = (chip->opcode & 0x00F0u) >> 4u;
-    
+    uint8_t height = chip->opcode & 0x000Fu;
+
+    uint8_t xPos = chip->registers[Vx] % VIDEO_WIDTH;
+    uint8_t yPos = chip->registers[Vy] % VIDEO_HEIGHT;
+
+    chip->registers[0xF] = 0;
+
+    for (unsigned int row = 0; row < height; row++){
+        // move to next byte when iterating memory address
+        uint8_t spriteByte = chip->memory[index + row];
+        for (unsigned int col = 0; col < 8; col++){
+            uint8_t spritePixel = spriteByte & (0x80u >> col);
+            // Use starting point and current position when drawing sprite to calculate array index
+            // for video output
+            uint32_t *screenPixel = &(chip->video[(yPos + row) * VIDEO_WIDTH + (xPos + col)]);
+
+            if (spritePixel){
+                if (*screenPixel == 0xFFFFFFFF){
+                    chip->registers = 1;
+                }
+                *screenPixel ^= 0xFFFFFFFF;
+            }
+        }
+    }
 }
 
+// Skip next instruction if key with the value of Vx is pressed
 void OP_Ex9E(chip8* chip){
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
 
+    uint8_t key = chip->registers[Vx];
+
+    if (chip->keypad[key]){
+        chip->program_counter += 2;
+    }
 }
 
+// Skip next instruction if key with the value of Vx is not pressed
 void OP_ExA1(chip8* chip){
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
 
+    uint8_t key = chip->registers[Vx];
+
+    if (!chip->keypad[key]){
+        chip->program_counter += 2;
+    }
 }
 
+// Set Vx = delay timer value
 void OP_Fx07(chip8* chip){
-
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
+    chip->registers[Vx] = chip->delayTimer;
 }
 
+// Wait for a key press, store the value of the key in Vx
 void OP_Fx0A(chip8* chip){
-
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
+	if (chip->keypad[0])
+	{
+		chip->registers[Vx] = 0;
+	}
+	else if (chip->keypad[1])
+	{
+		chip->registers[Vx] = 1;
+	}
+	else if (chip->keypad[2])
+	{
+		chip->registers[Vx] = 2;
+	}
+	else if (chip->keypad[3])
+	{
+		chip->registers[Vx] = 3;
+	}
+	else if (chip->keypad[4])
+	{
+		chip->registers[Vx] = 4;
+	}
+	else if (chip->keypad[5])
+	{
+		chip->registers[Vx] = 5;
+	}
+	else if (keypad[6])
+	{
+		chip->registers[Vx] = 6;
+	}
+	else if (chip->keypad[7])
+	{
+		chip->registers[Vx] = 7;
+	}
+	else if (chip->keypad[8])
+	{
+		chip->registers[Vx] = 8;
+	}
+	else if (chip->keypad[9])
+	{
+		chip->registers[Vx] = 9;
+	}
+	else if (chip->keypad[10])
+	{
+		chip->registers[Vx] = 10;
+	}
+	else if (chip->keypad[11])
+	{
+		chip->registers[Vx] = 11;
+	}
+	else if (chip->keypad[12])
+	{
+		chip->registers[Vx] = 12;
+	}
+	else if (chip->keypad[13])
+	{
+		chip->registers[Vx] = 13;
+	}
+	else if (chip->keypad[14])
+	{
+		chip->registers[Vx] = 14;
+	}
+	else if (chip->keypad[15])
+	{
+		chip->registers[Vx] = 15;
+	}
+	else
+	{
+		chip->program_counter -= 2;
+	}
 }
 
+// Set delay timer = Vx
 void OP_Fx15(chip8* chip){
-
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
+    chip->delayTimer = chip->registers[Vx];
 }
 
+// Set sound timer = Vx
 void OP_Fx18(chip8* chip){
-
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
+    chip->soundTimer = chip->registers[Vx]; 
 }
 
+// Set I = I + Vx
 void OP_Fx1E(chip8* chip){
-
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
+    chip->index += chip->registers[Vx];
 }
 
+// Set I = location of sprite for digit Vx
 void OP_Fx29(chip8* chip){
-
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
+    uint8_t digit = chip->registers[Vx];
+    // begin address for character is equal to itself * 5 bytes
+    chip->index = FONTSET_START_ADDRESS + (5 * digit) 
 }
 
+// Takes value and stores the the 100ths place value at memory location i
+// the 10s place value at i+1 and ones at i+2
 void OP_Fx33(chip8* chip){
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
+    uint8_t value = chip->registers[Vx];
 
+    chip->memory[chip->index + 2] = value % 10;
+    value /= 10;
+
+    chip->memory[chip->index + 1] = value % 10;
+    value /= 10;
+
+    chip->memory[chip->index] = value % 10;
 }
 
+// Store registers V0 through Vx in memory starting at location I
 void OP_Fx55(chip8* chip){
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
 
+    for (uint8_t i = 0; i <= Vx; i++){
+        chip->memory[chip->index + i] = chip->registers[i];
+    }
 }
 
+// Read registers V0 through Vx from memory starting at location I
 void OP_Fx65(chip8* chip){
+    uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
 
+    for (uint8_t i = 0; i <= Vx; i++){
+       chip->registers[i] =  chip->memory[chip->index + i];
+    }
 }
