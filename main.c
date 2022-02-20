@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "instruct.h"
 
 
 int main(){
-    srand(time(0));
+    chip8 a;
+    initalizeChip(&a);
+    
 }

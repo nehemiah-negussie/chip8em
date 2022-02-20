@@ -19,22 +19,6 @@ Y looks up one of the 16 registers (third nibble)
 
 // index just stores memory addresses to be used in operations that are too big for 8 bit registers
 
-typedef struct chip8 {
-    // uint8_t represents 1 byte
-    uint8_t registers[16];
-    uint8_t memory[4096];
-    uint16_t index;
-	uint16_t program_counter;
-	uint16_t stack[16];
-	uint8_t stack_pointer;
-	uint8_t delayTimer;
-	uint8_t soundTimer;
-	uint8_t keypad[16];
-	uint32_t video[64 * 32];
-	uint16_t opcode;
-
-} chip8;
-
 void initalizeChip (chip8* chip){
     chip->program_counter = START_ADDRESS;
 
@@ -61,6 +45,8 @@ void initalizeChip (chip8* chip){
     for (unsigned int i = 0; i = 0; i < FONTSET_SIZE){
         chip->memory[FONTSET_START_ADDRESS + i] = fontset[i];
     }
+
+
 }
 
 void loadROM(chip8* chip, char* filename){
@@ -306,7 +292,7 @@ void OP_Dxyn(chip8* chip){
 
     for (unsigned int row = 0; row < height; row++){
         // move to next byte when iterating memory address
-        uint8_t spriteByte = chip->memory[index + row];
+        uint8_t spriteByte = chip->memory[chip->index + row];
         for (unsigned int col = 0; col < 8; col++){
             uint8_t spritePixel = spriteByte & (0x80u >> col);
             // Use starting point and current position when drawing sprite to calculate array index
@@ -315,7 +301,7 @@ void OP_Dxyn(chip8* chip){
 
             if (spritePixel){
                 if (*screenPixel == 0xFFFFFFFF){
-                    chip->registers = 1;
+                    chip->registers[0xF] = 1;
                 }
                 *screenPixel ^= 0xFFFFFFFF;
             }
@@ -378,7 +364,7 @@ void OP_Fx0A(chip8* chip){
 	{
 		chip->registers[Vx] = 5;
 	}
-	else if (keypad[6])
+	else if (chip->keypad[6])
 	{
 		chip->registers[Vx] = 6;
 	}
@@ -447,7 +433,7 @@ void OP_Fx29(chip8* chip){
     uint8_t Vx = (chip->opcode & 0x0F00u) >> 8u;
     uint8_t digit = chip->registers[Vx];
     // begin address for character is equal to itself * 5 bytes
-    chip->index = FONTSET_START_ADDRESS + (5 * digit) 
+    chip->index = FONTSET_START_ADDRESS + (5 * digit);
 }
 
 // Takes value and stores the the 100ths place value at memory location i
@@ -480,5 +466,79 @@ void OP_Fx65(chip8* chip){
 
     for (uint8_t i = 0; i <= Vx; i++){
        chip->registers[i] =  chip->memory[chip->index + i];
+    }
+}
+void Table0 (chip8* chip){
+    void (*table0[0xE + 1])(chip8* chip);
+    table0[0x0] = OP_00E0;
+    table0[0xE] = OP_00EE;
+    (*table0[(chip->opcode & 0x000Fu)])(chip);
+}
+void Table8 (chip8* chip){
+    void (*table8[0xE + 1])(chip8* chip);
+    table8[0x0] = OP_8xy0;
+    table8[0x1] = OP_8xy1;
+    table8[0x2] = OP_8xy2;
+    table8[0x3] = OP_8xy3;
+    table8[0x4] = OP_8xy4;
+    table8[0x5] = OP_8xy5;
+    table8[0x6] = OP_8xy6;
+    table8[0x7] = OP_8xy7;
+    table8[0xE] = OP_8xyE;
+    (*table8[(chip->opcode & 0x000Fu)])(chip);
+}
+void TableE (chip8* chip){
+    void (*tableE[0xE + 1])(chip8* chip);
+    tableE[0x1] = OP_ExA1;
+    tableE[0xE] = OP_Ex9E;
+    (*tableE[(chip->opcode & 0x000Fu)])(chip);
+
+}
+void TableF (chip8* chip){
+    void (*tableF[0x65 +1])(chip8* chip);
+    tableF[0x07] = OP_Fx07;
+    tableF[0x0A] = OP_Fx0A;
+    tableF[0x15] = OP_Fx15;
+    tableF[0x18] = OP_Fx18;
+    tableF[0x1E] = OP_Fx1E;
+    tableF[0x29] = OP_Fx29;
+    tableF[0x33] = OP_Fx33;
+    tableF[0x55] = OP_Fx55;
+    tableF[0x65] = OP_Fx65;
+    (*tableF[(chip->opcode & 0x00FFu)])(chip);
+}
+
+// take opcode and give function
+void FunctionTable(chip8* chip){
+    void (*table[0xF])(chip8* chip);
+    table[0x0] = Table0;
+    table[0x1] = OP_1nnn;
+    table[0x2] = OP_2nnn;
+    table[0x3] = OP_3xkk;
+    table[0x4] = OP_4xkk;
+    table[0x5] = OP_5xy0;
+    table[0x6] = OP_6xkk;
+    table[0x7] = OP_7xkk;
+    table[0x8] = Table8;
+    table[0x9] = OP_9xy0;
+    table[0xA] = OP_Annn;
+    table[0xB] = OP_Bnnn;
+    table[0xC] = OP_Cxkk;
+    table[0xD] = OP_Dxyn;
+    table[0xE] = TableE;
+    table[0xF] = TableF;
+    (*table[(chip->opcode & 0xF000u) >> 12u])(chip);
+}
+
+void Cycle(chip8* chip){
+    chip->opcode = (chip->memory[chip->program_counter] << 8u) | chip->memory[chip->program_counter + 1];
+    chip->program_counter += 2;
+    FunctionTable(chip);
+
+    if (chip->delayTimer > 0){
+        chip->delayTimer--;
+    }
+    if (chip->soundTimer > 0){
+        chip->soundTimer--;
     }
 }

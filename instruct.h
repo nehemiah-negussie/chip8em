@@ -1,9 +1,34 @@
 #ifndef INSTRUCT_H_
 #define INSTRUCT_H_
 
+typedef struct chip8 {
+    // uint8_t represents 1 byte
+    uint8_t registers[16];
+    uint8_t memory[4096];
+    uint16_t index;
+	uint16_t program_counter;
+	uint16_t stack[16];
+	uint8_t stack_pointer;
+	uint8_t delayTimer;
+	uint8_t soundTimer;
+	uint8_t keypad[16];
+	uint32_t video[64 * 32];
+	uint16_t opcode;
+
+} chip8;
+
+
 void loadROM (chip8* chip, char* filename);
 void initalizeChip (chip8* chip);
 int8_t randByte ();
+
+void Table0 (chip8* chip);
+void Table8 (chip8* chip);
+void TableE (chip8* chip);
+void TableF (chip8* chip);
+void FunctionTable(chip8* chip);
+
+void Cycle(chip8* chip);
 
 void OP_00E0(chip8* chip);
 void OP_00EE(chip8* chip);
