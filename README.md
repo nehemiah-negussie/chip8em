@@ -17,3 +17,7 @@ To change the window size, use the `videoScale` variable to give an integer mult
 To change clock speed, use the `cycleDelay` variable to edit the time in ms between cycles.
 
 `romFilename` is a string with the path to the .ch8 ROM filename.
+
+### Where to get ROMS?
+
+All roms I used for testing were from this repo: https://github.com/dmatlack/chip8/tree/master/roms/games. 
