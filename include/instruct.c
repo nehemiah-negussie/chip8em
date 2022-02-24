@@ -7,7 +7,6 @@
 #define FONTSET_START_ADDRESS 0x50
 #define VIDEO_WIDTH 64
 #define VIDEO_HEIGHT 32
-
 /*
 For an opcode
 nnn refers to an address (last 3 nibbles)
@@ -18,6 +17,8 @@ Y looks up one of the 16 registers (third nibble)
 */
 
 // index just stores memory addresses to be used in operations that are too big for 8 bit registers
+
+typedef void TableFunction(chip8* chip);
 
 void initalizeChip (chip8* chip){
     chip->program_counter = START_ADDRESS;
@@ -44,6 +45,9 @@ void initalizeChip (chip8* chip){
 
     for (unsigned int i = 0; i < FONTSET_SIZE; i++){
         chip->memory[FONTSET_START_ADDRESS + i] = fontset[i];
+    }
+    for (int i = 0; i < VIDEO_WIDTH*VIDEO_HEIGHT; i++){
+        chip->video[i] = 0;
     }
 
 }
@@ -213,22 +217,24 @@ int Input (chip8* chip){
 }
 
 void loadROM(chip8* chip, char* filename){
-    FILE* f = fopen(filename, "rb+");
+    FILE* f = fopen(filename, "rb");
     if (!f) {
         perror("fopen");
         exit(EXIT_FAILURE);
     }
     fseek(f, 0, SEEK_END);
     long size = ftell(f); // number of bytes from the beginning of the file
-    fseek(f, 0, SEEK_SET); 
+    rewind(f); 
 
-    char* buffer[size];
+    char* buffer;
+    buffer = (char*) malloc(size * sizeof(char));
+    fread(buffer, size, 1, f);
 
-    fgets(buffer, size+1, f);
     fclose(f);
     for (long i = 0; i <  size; i++){
         chip->memory[START_ADDRESS + i] = buffer[i];
     }
+    free(buffer);
 }
     
 uint8_t randByte (){
@@ -632,13 +638,13 @@ void OP_Fx65(chip8* chip){
     }
 }
 void Table0 (chip8* chip){
-    void (*table0[0xE + 1])(chip8* chip);
+    TableFunction *table0[0xE + 1];
     table0[0x0] = OP_00E0;
     table0[0xE] = OP_00EE;
-    (*table0[(chip->opcode & 0x000Fu)])(chip);
+    table0[(chip->opcode & 0x000Fu)](chip);
 }
 void Table8 (chip8* chip){
-    void (*table8[0xE + 1])(chip8* chip);
+    TableFunction *table8[0xE + 1];
     table8[0x0] = OP_8xy0;
     table8[0x1] = OP_8xy1;
     table8[0x2] = OP_8xy2;
@@ -648,17 +654,17 @@ void Table8 (chip8* chip){
     table8[0x6] = OP_8xy6;
     table8[0x7] = OP_8xy7;
     table8[0xE] = OP_8xyE;
-    (*table8[(chip->opcode & 0x000Fu)])(chip);
+    table8[(chip->opcode & 0x000Fu)](chip);
 }
 void TableE (chip8* chip){
-    void (*tableE[0xE + 1])(chip8* chip);
+    TableFunction *tableE[0xE + 1];
     tableE[0x1] = OP_ExA1;
     tableE[0xE] = OP_Ex9E;
-    (*tableE[(chip->opcode & 0x000Fu)])(chip);
+    tableE[(chip->opcode & 0x000Fu)](chip);
 
 }
 void TableF (chip8* chip){
-    void (*tableF[0x65 +1])(chip8* chip);
+    TableFunction *tableF[0x65 + 1];
     tableF[0x07] = OP_Fx07;
     tableF[0x0A] = OP_Fx0A;
     tableF[0x15] = OP_Fx15;
@@ -668,12 +674,12 @@ void TableF (chip8* chip){
     tableF[0x33] = OP_Fx33;
     tableF[0x55] = OP_Fx55;
     tableF[0x65] = OP_Fx65;
-    (*tableF[(chip->opcode & 0x00FFu)])(chip);
+    tableF[(chip->opcode & 0x00FFu)](chip);
 }
 
 // take opcode and give function
 void FunctionTable(chip8* chip){
-    void (*table[0xF + 1])(chip8* chip);
+    TableFunction *table[0xF + 1];
     table[0x0] = Table0;
     table[0x1] = OP_1nnn;
     table[0x2] = OP_2nnn;
@@ -690,10 +696,12 @@ void FunctionTable(chip8* chip){
     table[0xD] = OP_Dxyn;
     table[0xE] = TableE;
     table[0xF] = TableF;
-    (*table[(chip->opcode & 0xF000u) >> 12u])(chip);
+    
+    table[(chip->opcode & 0xF000u) >> 12u](chip);
 }
 
 void Cycle(chip8* chip){
+    
     chip->opcode = (chip->memory[chip->program_counter] << 8u) | chip->memory[chip->program_counter + 1];
     chip->program_counter += 2;
     FunctionTable(chip);
